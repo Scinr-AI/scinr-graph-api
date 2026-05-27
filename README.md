@@ -30,7 +30,6 @@ The **SCINR Graph Service** is a FastAPI microservice that exposes Neo4j graph d
 |---|---|
 | Python | ≥ 3.14 |
 | FastAPI | latest |
-| `fastapi-mcp` | ≥ 0.4.0 |
 | `fastmcp` | ≥ 3.2.4 |
 | `neo4j` Python driver | ≥ 6.2.0 |
 | `uvicorn` | ASGI server |
@@ -53,8 +52,9 @@ graphApi/
 ├── src/
 │   ├── main.py                  # App entry point, FastAPI + MCP setup
 │   ├── api/
-│   │   ├── graphApiRouter.py    # Public REST API routes
-│   │   └── graphMcpRouter.py    # Internal MCP-only routes
+│   │   └── graphApiRouter.py    # Public REST API routes
+│   ├── mcp_servers/
+│   │   └── graphMcp.py          # FastMCP server definition & tools
 │   ├── models/
 │   │   └── graphModels.py       # Pydantic request/response models
 │   └── utils/
@@ -159,8 +159,6 @@ uvicorn src.main:app --host 0.0.0.0 --port 8000
 | `GET` | `/` | Health check | Public |
 | `GET` | `/api/graph/schema` | Retrieve the full Neo4j graph schema (requires APOC plugin) | Public |
 | `POST` | `/api/graph/read` | Execute a Cypher read query against the database | Public |
-| `GET` | `/graph/schema` | Schema retrieval, reserved for MCP server internal calls | MCP only (localhost) |
-| `POST` | `/graph/read` | Cypher read query, reserved for MCP server internal calls | MCP only (localhost) |
 
 ### `POST /api/graph/read` — Request Body
 
@@ -177,7 +175,7 @@ uvicorn src.main:app --host 0.0.0.0 --port 8000
 
 ## 🤖 MCP Integration
 
-This service embeds a **Model Context Protocol (MCP) server** powered by `fastapi-mcp`. The MCP server is mounted at `/mcp` and exposes the graph tools to AI agents and clients that support MCP.
+This service embeds a **Model Context Protocol (MCP) server** powered by [`fastmcp`](https://github.com/jlowin/fastmcp). The MCP server is mounted at `/mcp` and uses **stateless HTTP transport** (`stateless_http=True`), making it fully compatible with serverless deployments (e.g., AWS Lambda) where no persistent session state is maintained between requests.
 
 ### Available MCP Tools
 
@@ -222,9 +220,7 @@ This service embeds a **Model Context Protocol (MCP) server** powered by `fastap
 
 - **CORS**: Cross-Origin Resource Sharing is enabled for `http://localhost:3000` and `http://localhost:8000` by default. Update `origins` in `src/main.py` to match your frontend or client URLs.
 
-- **Route Separation**: There are two distinct sets of routes:
-  - `/api/graph/*` — public REST API, accessible to any authorized client
-  - `/graph/*` — internal routes used exclusively by the MCP server
+- **MCP Stateless Transport**: The MCP server uses `stateless_http=True`, meaning each request is fully independent with no server-side session state. This is required for serverless deployments (e.g., AWS Lambda) where the process may be recycled between invocations. MCP tools call the REST handler functions directly in-process — no internal HTTP round-trip.
 
 - **Read-Only**: The service only performs read operations on the Neo4j database. Write queries are rejected at the application level before reaching the database.
 
